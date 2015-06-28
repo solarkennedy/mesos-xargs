@@ -43,6 +43,7 @@ class XargsScheduler(Scheduler):
         self._cpu_alloc = 0
         self._mem_alloc = 0
         self.commands = commands
+        self.command_count = len(commands)
 
     def registered(self, driver, framework_id, master_info):
         logging.info("Registered with framework id: {}".format(framework_id))
@@ -50,6 +51,14 @@ class XargsScheduler(Scheduler):
     def resourceOffers(self, driver, offers):
         logging.info("Recieved resource offers: {}".format([o.id.value for o in offers]))
         for offer in offers:
+            if commands == []:
+                print "No commands left to run, not processing offer"
+                if self.tasksFinished == self.command_count:
+                    print "Looks like they all finished!"
+                    sys.exit(0)
+                else:
+                    print "We have %d finished out of %d total" % (self.tasksFinished, self.command_count)
+                continue
             task = new_task(offer)
             task.command.value = commands.pop()
             time.sleep(1)
@@ -77,6 +86,7 @@ class XargsScheduler(Scheduler):
         if update.state == mesos_pb2.TASK_FINISHED:
             self.tasksFinished += 1
             logging.info("Task %s is finished. %d total tasks done now!", update.task_id.value, self.tasksFinished)
+            time.sleep(5) # ?
             for stream in mesos.cli.cluster.files(flist=['stdout','stderr'], fltr=update.task_id.value):
                 print "Printing %s for task %s" % (stream[0].path, update.task_id.value) 
                 for line in stream[0].readlines():
