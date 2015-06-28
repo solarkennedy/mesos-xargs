@@ -14,7 +14,7 @@ This is mostly left up as an exercise to the reader...
 
 ## Running
 
-TODO
+    seq 1 10 | ./mesos_xargs.py echo
 
 ## Acknowledgements
 

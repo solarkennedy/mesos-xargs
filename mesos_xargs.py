@@ -1,7 +1,9 @@
 #!/usr/bin/env python2.7
+import fileinput
 import logging
 import uuid
 import time
+import sys
 
 from mesos.interface import Scheduler
 from mesos.native import MesosSchedulerDriver
@@ -32,7 +34,7 @@ def new_task(offer):
 
 class XargsScheduler(Scheduler):
 
-    def __init__ (self):
+    def __init__ (self, commands):
         self.taskData = {}
         self.tasksLaunched = 0
         self.tasksFinished = 0
@@ -40,6 +42,7 @@ class XargsScheduler(Scheduler):
         self.messagesReceived = 0
         self._cpu_alloc = 0
         self._mem_alloc = 0
+        self.commands = commands
 
     def registered(self, driver, framework_id, master_info):
         logging.info("Registered with framework id: {}".format(framework_id))
@@ -48,8 +51,8 @@ class XargsScheduler(Scheduler):
         logging.info("Recieved resource offers: {}".format([o.id.value for o in offers]))
         for offer in offers:
             task = new_task(offer)
-            task.command.value = "echo hello world"
-            time.sleep(6)
+            task.command.value = commands.pop()
+            time.sleep(1)
             logging.info("Launching task {task} "
                          "using offer {offer}.".format(task=task.task_id.value,
                                                        offer=offer.id.value))
@@ -81,12 +84,18 @@ class XargsScheduler(Scheduler):
 
 
 if __name__ == '__main__':
-    # make us a framework
+    # Get the list of commands to run
+    # TODO: Get this "just in time" instead of at startup
+    prefix=" ".join(sys.argv[1:])
+    commands = []
+    for line in fileinput.input("-"):
+        commands.append("%s %s" % (prefix, line.rstrip()))
+    logging.info("Executing commands: %s" % commands)
     framework = mesos_pb2.FrameworkInfo()
     framework.user = ""  # Have Mesos fill in the current user.
     framework.name = "mesos-xargs"
     driver = MesosSchedulerDriver(
-        XargsScheduler(),
+        XargsScheduler(commands),
         framework,
         "zk://localhost:2181/mesos"  # assumes running on the master
     )
