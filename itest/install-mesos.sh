@@ -10,3 +10,5 @@ sudo apt-get -y update
 
 # Install packages
 sudo apt-get -y --force-yes install mesos 
+sudo start mesos-master
+sudo start mesos-slave
