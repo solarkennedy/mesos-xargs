@@ -1,5 +1,7 @@
 # mesos-xargs
 
+[![Build Status](https://travis-ci.org/solarkennedy/mesos-xargs.svg)](https://travis-ci.org/solarkennedy/mesos-xargs)
+
 Have a Mesos cluster and you just want to run stuff on it?
 
 Ever wish you could just use `xargs`? No? Good. You are a sane person

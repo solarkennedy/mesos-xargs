@@ -1,4 +1,7 @@
 mesos.cli==0.1.3
-mesos.native==0.23.0
-mesos.interface=0.23.0
+
+# Comes from site packages?
+#mesos.native==0.23.0
+
+mesos.interface==0.23.0
 protobuf
