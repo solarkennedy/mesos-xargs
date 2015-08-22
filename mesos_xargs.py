@@ -5,12 +5,18 @@ import uuid
 import time
 import sys
 
+# Where mesos packages put their native python lib
+sys.path.insert(0, '/usr/lib/python2.7/site-packages/mesos')
+from native import MesosSchedulerDriver
+
 from mesos.interface import Scheduler
-from mesos.native import MesosSchedulerDriver
 from mesos.interface import mesos_pb2
 import mesos.cli.cluster
 
 logging.basicConfig(level=logging.INFO)
+
+TASK_MEM = 24
+TASK_CPUS = 0.1
 
 def new_task(offer):
     task = mesos_pb2.TaskInfo()
@@ -22,12 +28,12 @@ def new_task(offer):
     cpus = task.resources.add()
     cpus.name = "cpus"
     cpus.type = mesos_pb2.Value.SCALAR
-    cpus.scalar.value = 1
+    cpus.scalar.value = TASK_CPUS
 
     mem = task.resources.add()
     mem.name = "mem"
     mem.type = mesos_pb2.Value.SCALAR
-    mem.scalar.value = 1
+    mem.scalar.value = TASK_MEM
 
     return task
 
@@ -48,25 +54,45 @@ class XargsScheduler(Scheduler):
     def registered(self, driver, framework_id, master_info):
         logging.info("Registered with framework id: {}".format(framework_id))
 
+    def maxTasksForOffer(self, offer):
+        count = 0
+        cpus = next(rsc.scalar.value for rsc in offer.resources if rsc.name == "cpus")
+        mem = next(rsc.scalar.value for rsc in offer.resources if rsc.name == "mem")
+        while cpus >= TASK_CPUS and mem >= TASK_MEM:
+            count += 1
+            cpus -= TASK_CPUS
+            mem -= TASK_MEM
+        return count
+
     def resourceOffers(self, driver, offers):
         logging.info("Recieved resource offers: {}".format([o.id.value for o in offers]))
         for offer in offers:
+            maxTasks = min(self.maxTasksForOffer(offer), self.command_count)
+            print "maxTasksForOffer: [%d]" % maxTasks
             if commands == []:
                 print "No commands left to run, not processing offer"
+                print "Declining offer on [%s]" % offer.hostname
+                driver.declineOffer(offer.id)
                 if self.tasksFinished == self.command_count:
                     print "Looks like they all finished!"
                     sys.exit(0)
                 else:
                     print "We have %d finished out of %d total" % (self.tasksFinished, self.command_count)
                 continue
-            task = new_task(offer)
-            task.command.value = commands.pop()
-            time.sleep(1)
-            logging.info("Launching task {task} "
-                         "using offer {offer}.".format(task=task.task_id.value,
-                                                       offer=offer.id.value))
-            tasks = [task]
-            driver.launchTasks(offer.id, tasks)
+            tasks = []
+            for i in range(maxTasks):
+                task = new_task(offer)
+                task.command.value = commands.pop()
+                logging.info("Launching task {task} "
+                             "using offer {offer}.".format(task=task.task_id.value,
+                                                           offer=offer.id.value))
+                tasks.append(task)
+            if tasks:
+                driver.launchTasks(offer.id, tasks)
+            else:
+                print "Declining offer on [%s]" % offer.hostname
+                driver.declineOffer(offer.id)
+
 
     def statusUpdate (self, driver, update):
         """
@@ -86,7 +112,6 @@ class XargsScheduler(Scheduler):
         if update.state == mesos_pb2.TASK_FINISHED:
             self.tasksFinished += 1
             logging.info("Task %s is finished. %d total tasks done now!", update.task_id.value, self.tasksFinished)
-            time.sleep(5) # ?
             for stream in mesos.cli.cluster.files(flist=['stdout','stderr'], fltr=update.task_id.value):
                 print "Printing %s for task %s" % (stream[0].path, update.task_id.value) 
                 for line in stream[0].readlines():
